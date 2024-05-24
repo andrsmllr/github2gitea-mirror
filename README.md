@@ -15,12 +15,12 @@ One is able to create mirrors for various GitHub entities and the other is capab
 ### Mirroring users, organizations, repos
 
 First, setup your environment variables like this:
-- `ACCESS_TOKEN` is an application access token of your Gitea instance (always needed).
+- `GITEA_TOKEN` is an application access token of your Gitea instance (always needed).
 - `GITEA_URL` is the URL of your Gitea instance (without trailing slash!) (always needed).
 - `GITHUB_TOKEN` is a personal access token for your GitHub account. It is needed in case you want to access private repos of your account/an organization.
 
 ```bash
-export ACCESS_TOKEN=123
+export GITEA_TOKEN=123
 export GITEA_URL=https://gitea.example.com
 export GITHUB_TOKEN=456
 ```
@@ -31,8 +31,9 @@ There are four modes of operation, which the script can print out to the console
 
 Usage: ./github2gitea-mirror
    -m, --mode {org,star,repo,user}     Mode to use; either mirror an organization or mirror all starred repositories.
-   -o, --org $organization             GitHub organization to mirror and/or the target organization in Gitea.
-   -u, --user $github_user             GitHub user to gather the starred repositories from.
+   -o, --github-org $organization      GitHub organization to mirror and/or the target organization in Gitea.
+   -u, --github-user $github_user      GitHub user to gather the starred repositories from.
+   -U, --gitea-user $gitea_user        Gitea user or organization who will own the mirror repo.
    -v, --visibility {public,private}   Visibility for the created Gitea organization.
    -r, --repo $repo_url                GitHub URL of a single repo to create a mirror for.
 ```
@@ -73,11 +74,11 @@ Mirror a complete GitHub user:
 ### Deleting Gitea organizations with all repositories
 
 First, setup your environment variables like this:
-- `ACCESS_TOKEN` is an application access token of your Gitea instance.
+- `GITEA_TOKEN` is an application access token of your Gitea instance.
 - `GITEA_URL` is the URL of your Gitea instance (without trailing slash!).
 
 ```bash
-export ACCESS_TOKEN=123
+export GITEA_TOKEN=123
 export GITEA_URL=https://gitea.example.com
 ```
 
