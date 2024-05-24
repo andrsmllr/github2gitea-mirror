@@ -11,12 +11,14 @@
 #
 # Heavily inspired by:
 #   https://github.com/juergenhoetzel/github2gitea-mirror
-# 
-
+#
 # ENVs:
-#   ACCESS_TOKEN = Gitea token
-#   GITERA_URL   = Gitea URL
+#   GITEA_TOKEN  = Gitea token
+#   GITEA_URL    = Gitea URL
 #   GITHUB_TOKEN = GitHub personal access token
+#
+# Example:
+# GITEA_TOKEN=abc GITEA_URL=https://gitea.example.com GITHUB_TOKEN=def ./github2gitea-mirror ...
 
 # Displays the given input including "=> " on the console.
 log () {
@@ -26,9 +28,9 @@ log () {
 CURL="curl -f -S -s"
 
 # Check for correctly set ENVs
-# ACCESS_TOKEN and GITEA_URL are always necessary
-if [[ -z "${ACCESS_TOKEN}" || -z "${GITEA_URL}" ]]; then
-    echo -e "Please set the Gitea access token and URL in environment:\nexport ACCESS_TOKEN=abc\nexport GITEA_URL=http://gitea:3000\n" >&2
+# GITEA_TOKEN and GITEA_URL are always necessary
+if [[ -z "${GITEA_TOKEN}" || -z "${GITEA_URL}" ]]; then
+    echo -e "Please set the Gitea access token and URL in environment:\nexport GITEA_TOKEN=abc\nexport GITEA_URL=http://gitea:3000\n" >&2
     echo -e "Don't use a trailing slash in URL!"
     exit 1
 fi
@@ -40,12 +42,13 @@ if [[ -z "$1" ]]; then
 fi
 while [[ "$#" -gt 0 ]]; do
 	case $1 in
-		-m|--mode) mode="$2"; shift ;;
-		-o|--org) gitea_organization="$2"; shift ;;
-        -u|--user) github_user="$2"; shift ;;
-        -v|--visibility) visibility="$2"; shift ;;
-        -r|--repo) repo="$2"; shift ;;
-		*) log "Unknown parameter passed: $1"; exit 1 ;;
+            -m|--mode) mode="$2"; shift ;;
+            -o|--github-org) github_organization="$2"; shift ;;
+            -u|--github-user) github_user="$2"; shift ;;
+            -U|--gitea-user) gitea_user="$2"; shift ;;
+            -v|--visibility) visibility="$2"; shift ;;
+            -r|--repo) repo="$2"; shift ;;
+            *) log "Unknown parameter passed: $1"; exit 1 ;;
 	esac
 	shift
 done
@@ -53,11 +56,12 @@ done
 # Prints a message on how to use the script with exit 1
 fail_print_usage () {
     echo -e "Usage: $0"
-    echo -e "   -m, --mode {org,star,repo,user}     Mode to use; either mirror an organization or mirror all starred repositories."
-    echo -e "   -o, --org \$organization             GitHub organization to mirror and/or the target organization in Gitea."
-    echo -e "   -u, --user \$github_user             GitHub user to gather the starred repositories from."
-    echo -e "   -v, --visibility {public,private}   Visibility for the created Gitea organization."
-    echo -e "   -r, --repo \$repo_url                GitHub URL of a single repo to create a mirror for."
+    echo -e "   -m, --mode {org,star,repo,user}    Mode to use; either mirror an organization or mirror all starred repositories."
+    echo -e "   -o, --github-org \$github_organization      GitHub organization to mirror and/or the target organization in Gitea."
+    echo -e "   -u, --github-user \$github_user    GitHub user to gather the starred repositories from."
+    echo -e "   -U, --gitea-user \$gitea_user      Gitea user or organization who will own the mirror repo."
+    echo -e "   -v, --visibility {public,private}  Visibility for the created Gitea organization."
+    echo -e "   -r, --repo \$repo_url              GitHub URL of a single repo to create a mirror for."
     echo "" >&2
     exit 1;
 }
@@ -69,7 +73,7 @@ fi
 
 # Check required parameters per mode
 if [ "${mode}" == "org" ]; then
-    if [[ -z "${gitea_organization}" ]]; then
+    if [[ -z "${github_organization}" ]]; then
         echo -e "Organization not set."
         fail_print_usage
     fi
@@ -80,19 +84,19 @@ if [ "${mode}" == "org" ]; then
     fi
 elif [ "${mode}" == "star" ]; then
     if [[ -z "${gitea_organization}" || -z "${github_user}" ]]; then
-        echo -e "Organization or GitHub user not set."
+        echo -e "Gitea organization or GitHub user not set."
         fail_print_usage
     fi
 elif [ "${mode}" == "repo" ]; then
-    if [[ -z "${repo}" || -z "${github_user}" ]]; then
-        echo -e "Repo URL or GitHub user not set."
+    if [[ -z "${repo}" || -z "${github_user}" || -z "${gitea_user}" ]]; then
+        echo -e "Repo URL or GitHub user or Gitea user not set."
         fail_print_usage
     fi
 elif [ "${mode}" == "user" ]; then
     if [[ -z "${github_user}" ]]; then
         echo -e "GitHub user not set."
         fail_print_usage
-    fi  
+    fi
 else
     echo -e "Mode not found."
     fail_print_usage
@@ -102,7 +106,7 @@ fi
 #set -euo pipefail
 set -eu pipefail
 
-header_options=(-H  "Authorization: Bearer ${ACCESS_TOKEN}" -H "accept: application/json" -H "Content-Type: application/json")
+header_options=(-H  "Authorization: Bearer ${GITEA_TOKEN}" -H "accept: application/json" -H "Content-Type: application/json")
 jsonoutput=$(mktemp -d -t github-repos-XXXXXXXX)
 
 trap "rm -rf ${jsonoutput}" EXIT
@@ -114,7 +118,7 @@ set_uid() {
 
 # Sets the uid to the specified Gitea user
 set_uid_user() {
-    uid=$($CURL "${header_options[@]}" $GITEA_URL/api/v1/users/${github_user} | jq .id)
+    uid=$($CURL "${header_options[@]}" $GITEA_URL/api/v1/users/${gitea_user} | jq .id)
 }
 
 # Fetches all starred repos of the given user to JSON files
@@ -152,7 +156,7 @@ fetch_user_repos() {
 
 # Fetches one public/private GitHub repo to a JSON file
 fetch_one_repo() {
-    log "Fetch one repo."
+    log "Fetch one repo ($repo)."
     # Remove URL prefix
     repo=$(echo $repo | sed "s/https:\/\/github.com\///g" | sed "s/.git//g")
     $CURL "https://api.github.com/repos/$repo" -u "username:${GITHUB_TOKEN}" >${jsonoutput}/1.json
@@ -220,6 +224,7 @@ one_repo_to_migration() {
             .clone_addr=.clone_url | \
             .description=.description[0:255] | \
             .repo_name=.name | \
+            .repo_owner=\"${gitea_user}\" | \
             {repo_owner,repo_name,clone_addr,description,mirror,private,auth_username,auth_password}" <$f)
         echo "Migrating repo" $(jq ".name" <$f)
         echo $mig_data | create_migration_repo
